@@ -1,0 +1,18 @@
+TELECUENTOS - instrucciones
+
+Archivos:
+  index.html, manifest.json, sw.js, icons/
+
+1) Sube toda la carpeta a un hosting con HTTPS
+   (GitHub Pages, Netlify, Cloudflare Pages, Vercel, tu propio servidor...).
+   Los service workers solo funcionan con HTTPS (o en localhost).
+2) Para probar en tu computadora:
+      cd telecuentos
+      python3 -m http.server 8000
+   y abre http://localhost:8000
+3) Abre la URL en el móvil o en Chrome/Edge y elige "Instalar app"
+   (en iPhone: Compartir > Añadir a pantalla de inicio).
+4) Después de cambiar index.html, sube el número de CACHE en sw.js
+   (telecuentos-v1 -> telecuentos-v2) para que se actualice.
+
+Los cuentos se guardan en el navegador de cada dispositivo (localStorage).

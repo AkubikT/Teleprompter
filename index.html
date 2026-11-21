@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Telecuentos</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14172b">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Nunito:wght@500;700&display=swap">
+<style>
+:root{--bg:#14172b;--panel:#1f2340;--ink:#f3e9d2;--muted:#9da2c4;--accent:#7fd8c6;--line:#343a66;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#14172b}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:Nunito,system-ui,sans-serif}
+button,select,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.6rem 1rem;min-height:44px}
+button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.main{background:var(--accent);color:#0d2a25;border-color:var(--accent);font-weight:700}
+#editor{height:100%;display:flex;flex-direction:column;gap:.75rem;padding:1rem;max-width:760px;margin:0 auto}
+h1{font-family:Fraunces,serif;font-weight:600;font-size:1.8rem;margin:.2rem 0 0}
+.sub{color:var(--muted);margin:0}
+.row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+#title{flex:1;min-width:150px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.6rem .8rem;min-height:44px}
+#text{flex:1;min-height:160px;resize:none;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1rem;font-family:Fraunces,serif;font-size:1.1rem;line-height:1.6}
+#list{display:flex;gap:.5rem;overflow-x:auto;padding-bottom:.25rem}
+#list button{white-space:nowrap}
+#list button.on{border-color:var(--accent);color:var(--accent)}
+#reader{display:none;position:fixed;inset:0;background:var(--bg)}
+#reader.show{display:block}
+#view{position:absolute;inset:0;overflow-y:scroll;scrollbar-width:none;padding:38vh 7vw 70vh;touch-action:pan-y}
+#view::-webkit-scrollbar{display:none}
+#story{max-width:900px;margin:0 auto;font-family:Fraunces,serif;line-height:1.55;white-space:pre-wrap;font-size:48px;text-align:left}
+#reader.mirror #story{transform:scaleX(-1)}
+#band{position:absolute;left:0;right:0;top:36vh;height:14vh;border-block:2px solid var(--accent);background:rgba(127,216,198,.07);pointer-events:none;opacity:.8}
+#bar{position:absolute;left:0;right:0;bottom:0;padding:.75rem 1rem calc(.75rem + env(safe-area-inset-bottom,0px));background:linear-gradient(transparent,rgba(20,23,43,.97) 30%);display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;justify-content:center;transition:opacity .3s}
+#reader.playing #bar{opacity:.25}
+#reader.playing #bar:hover,#reader.playing #bar:focus-within{opacity:1}
+label.s{display:flex;align-items:center;gap:.4rem;color:var(--muted);font-size:.9rem}
+input[type=range]{width:110px;accent-color:var(--accent)}
+#top{position:absolute;top:env(safe-area-inset-top,0px);left:0;right:0;display:flex;justify-content:space-between;padding:.6rem 1rem;z-index:2}
+</style>
+</head>
+<body>
+<section id="editor">
+  <div><h1>Telecuentos</h1><p class="sub">Pega tu cuento, ajusta la velocidad y léelo sin perder el hilo.</p></div>
+  <div id="list" aria-label="Cuentos guardados"></div>
+  <div class="row">
+    <input id="title" placeholder="Título del cuento" aria-label="Título">
+    <button id="new">Nuevo cuento</button>
+    <button id="del">Borrar</button>
+  </div>
+  <textarea id="text" placeholder="Había una vez..." aria-label="Texto del cuento"></textarea>
+  <div class="row"><button id="read" class="main" style="flex:1">Leer cuento</button></div>
+</section>
+
+<section id="reader" aria-label="Lector">
+  <div id="top"><button id="back">Volver</button><button id="fs">Pantalla completa</button></div>
+  <div id="view"><div id="story"></div></div>
+  <div id="band"></div>
+  <div id="bar">
+    <button id="rew" aria-label="Volver al inicio">Inicio</button>
+    <button id="play" class="main">Empezar</button>
+    <label class="s">Velocidad <input id="spd" type="range" min="5" max="200" value="40"></label>
+    <label class="s">Letra <input id="size" type="range" min="24" max="110" value="48"></label>
+    <button id="mir" aria-pressed="false">Espejo</button>
+  </div>
+</section>
+
+<script>
+(function(){
+  var $=function(i){return document.getElementById(i)};
+  var KEY='telecuentos.v1', db={stories:[],cur:null,spd:40,size:48};
+  function load(){try{var r=localStorage.getItem(KEY);if(r)db=Object.assign(db,JSON.parse(r))}catch(e){}}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}}
+  load();
+  if(!db.stories.length){db.stories.push({id:Date.now(),title:'Cuento de ejemplo',text:'Había una vez, en un bosque muy lejano, un pequeño zorro que no podía dormir.\n\nCada noche contaba las estrellas, y cada noche se le olvidaba el número.\n\nUna noche, la luna bajó a susurrarle un secreto…\n\nPega aquí tu propio cuento y pulsa «Leer cuento».'});db.cur=db.stories[0].id}
+  function cur(){return db.stories.find(function(s){return s.id===db.cur})||db.stories[0]}
+  function renderList(){
+    var l=$('list');l.innerHTML='';
+    db.stories.forEach(function(s){var b=document.createElement('button');b.textContent=s.title||'Sin título';if(s.id===db.cur)b.className='on';b.onclick=function(){commit();db.cur=s.id;save();fill()};l.appendChild(b)});
+  }
+  function fill(){var s=cur();db.cur=s.id;$('title').value=s.title;$('text').value=s.text;renderList()}
+  function commit(){var s=cur();s.title=$('title').value;s.text=$('text').value;save()}
+  $('title').oninput=function(){commit();renderList()};
+  $('text').oninput=commit;
+  $('new').onclick=function(){commit();var s={id:Date.now(),title:'Cuento nuevo',text:''};db.stories.push(s);db.cur=s.id;save();fill();$('text').focus()};
+  $('del').onclick=function(){if(!confirm('¿Borrar este cuento?'))return;db.stories=db.stories.filter(function(s){return s.id!==db.cur});if(!db.stories.length)db.stories.push({id:Date.now(),title:'Cuento nuevo',text:''});db.cur=db.stories[0].id;save();fill()};
+  fill();
+
+  var R=$('reader'),V=$('view'),playing=false,pos=0,last=0,wake=null,raf=0;
+  $('spd').value=db.spd;$('size').value=db.size;$('story').style.fontSize=db.size+'px';
+  function open(){commit();$('story').textContent=cur().text||'(Escribe tu cuento primero)';R.classList.add('show');V.scrollTop=0;pos=0}
+  function close(){stop();R.classList.remove('show')}
+  async function lock(){try{if(navigator.wakeLock)wake=await navigator.wakeLock.request('screen')}catch(e){}}
+  function unlock(){try{if(wake){wake.release();wake=null}}catch(e){}}
+  function tick(t){
+    if(!playing)return;
+    var dt=(t-last)/1000;last=t;
+    pos+=parseFloat($('spd').value)*dt;
+    V.scrollTop=pos;
+    if(V.scrollTop<pos-2){pos=V.scrollTop;if(pos>=V.scrollHeight-V.clientHeight-2){stop();return}}
+    raf=requestAnimationFrame(tick);
+  }
+  function start(){playing=true;pos=V.scrollTop;last=performance.now();R.classList.add('playing');$('play').textContent='Pausar';lock();raf=requestAnimationFrame(tick)}
+  function stop(){playing=false;cancelAnimationFrame(raf);R.classList.remove('playing');$('play').textContent='Seguir';unlock()}
+  function toggle(){playing?stop():start()}
+  $('read').onclick=function(){open();$('play').textContent='Empezar'};
+  $('back').onclick=close;
+  $('play').onclick=toggle;
+  $('rew').onclick=function(){stop();V.scrollTop=0;pos=0;$('play').textContent='Empezar'};
+  $('spd').oninput=function(){db.spd=+this.value;save()};
+  $('size').oninput=function(){db.size=+this.value;$('story').style.fontSize=this.value+'px';save()};
+  $('mir').onclick=function(){var m=R.classList.toggle('mirror');this.setAttribute('aria-pressed',m)};
+  $('fs').onclick=function(){try{document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}catch(e){}};
+  V.addEventListener('click',function(){toggle()});
+  V.addEventListener('wheel',function(){pos=V.scrollTop},{passive:true});
+  V.addEventListener('touchend',function(){pos=V.scrollTop},{passive:true});
+  document.addEventListener('keydown',function(e){
+    if(!R.classList.contains('show'))return;
+    var s=$('spd');
+    if(e.code==='Space'){e.preventDefault();toggle()}
+    else if(e.key==='ArrowUp'){e.preventDefault();s.value=+s.value+5;s.oninput()}
+    else if(e.key==='ArrowDown'){e.preventDefault();s.value=+s.value-5;s.oninput()}
+    else if(e.key==='Escape')close();
+  });
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&playing)lock()});
+
+  // Service worker (modo sin conexión)
+  if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}
+})();
+</script>
+</body>
+</html>
